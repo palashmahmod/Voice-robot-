@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>স্মার্ট ভয়েস রোবট অ্যাপ</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 500px;
+        }
+        h2, h3 { text-align: center; color: #333; margin-top: 5px; }
+        .controls { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
+        button {
+            padding: 12px 28px;
+            font-size: 16px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        .btn-on { background-color: #2da44e; color: white; }
+        .btn-on:hover { background-color: #2c974b; }
+        .btn-off { background-color: #cf222e; color: white; }
+        .btn-off:hover { background-color: #b91c28; }
+        .status { text-align: center; font-weight: bold; color: #666; margin-bottom: 15px; }
+        .log-box {
+            background: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 60px;
+            margin-bottom: 20px;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .form-group {
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        input {
+            width: 94%;
+            padding: 10px;
+            margin: 8px 0 15px 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .save-btn { background-color: #0969da; color: white; width: 100%; border-radius: 6px; }
+        .save-btn:hover { background-color: #0c63ce; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .action-btns { display: flex; gap: 5px; }
+        .edit-btn { background: #ffc107; color: black; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
+        .delete-btn { background: #dc3545; color: white; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🤖 আমার ভয়েস রোবট</h2>
+    
+    <div class="controls">
+        <button class="btn-on" id="startBtn">ON</button>
+        <button class="btn-off" id="stopBtn">OFF</button>
+    </div>
+    
+    <div class="status" id="statusText">অবস্থা: বন্ধ আছে 🔴</div>
+    
+    <div class="log-box" id="chatLog">
+        <span style="color: #888;">অন করার পর মুখে প্রশ্ন করুন, এখানে কথোপকথন দেখা যাবে...</span>
+    </div>
+
+    <div class="form-group">
+        <h3>➕ প্রশ্ন-উত্তর যোগ/সম্পাদনা করুন</h3>
+        <input type="hidden" id="editIndex" value="">
+        <label><b>প্রশ্ন (যা মুখে বলবেন):</b></label>
+        <input type="text" id="newQuestion" placeholder="উদা: তোমার নাম কি">
+        
+        <label><b>উত্তর (যা রোবট বলবে):</b></label>
+        <input type="text" id="newAnswer" placeholder="উদা: আমার নাম রোবট">
+        
+        <button class="save-btn" id="saveBtn">সেভ করুন</button>
+    </div>
+
+    <div class="qa-list-container">
+        <h3>📋 সংরক্ষিত প্রশ্ন ও উত্তরের তালিকা</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 10%">ক্র.নং</th>
+                    <th style="width: 40%">প্রশ্ন</th>
+                    <th style="width: 35%">উত্তর</th>
+                    <th style="width: 15%">অ্যাকশন</th>
+                </tr>
+            </thead>
+            <tbody id="qaTableBody"></tbody>
+        </table>
+    </div>
+</div>
+<script>
+    const defaultQA = [
+        { q: "হ্যালো", a: "হ্যালো! আমি আপনাকে কীভাবে সাহায্য করতে পারি?" },
+        { q: "তোমার নাম কি", a: "আমি আপনার তৈরি করা একটি ভয়েস রোবট।" },
+        { q: "কেমন আছ", a: "আমি ভালো আছি, ধন্যবাদ! আপনি কেমন আছেন?" }
+    ];
+
+    let qaDatabase = JSON.parse(localStorage.getItem('voiceQA_v2')) || defaultQA;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    let isRobotOn = false;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false; 
+        recognition.lang = 'bn-BD'; 
+        recognition.interimResults = false;
+    } else {
+        alert("আপনার ব্রাউজারে ভয়েস সিস্টেম সাপোর্ট করছে না। Google Chrome ব্যবহার করুন।");
+    }
+
+    const statusText = document.getElementById('statusText');
+    const chatLog = document.getElementById('chatLog');
+    const qaTableBody = document.getElementById('qaTableBody');
+
+    function updateQATable() {
+        qaTableBody.innerHTML = "";
+        qaDatabase.forEach((item, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${item.q}</td>
+                <td>${item.a}</td>
+                <td class="action-btns">
+                    <button class="edit-btn" onclick="editQA(${index})">ইডিট</button>
+                    <button class="delete-btn" onclick="deleteQA(${index})">ডিলিট</button>
+                </td>
+            `;
+            qaTableBody.appendChild(row);
+        });
+        localStorage.setItem('voiceQA_v2', JSON.stringify(qaDatabase));
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        if (!recognition || isRobotOn) return; 
+        isRobotOn = true;
+        statusText.innerHTML = "অবস্থা: চালু আছে (আপনার কথা শুনছি...) 🟢";
+        statusText.style.color = "#2da44e";
+        speak(""); 
+        try { recognition.start(); } catch(e) {}
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+        isRobotOn = false;
+        if (recognition) recognition.stop();
+        statusText.innerHTML = "অবস্থা: বন্ধ আছে 🔴";
+        statusText.style.color = "#cf222e";
+    });
+    if (recognition) {
+        recognition.onresult = (event) => {
+            const spokenText = event.results.transcript.trim();
+            chatLog.innerHTML = `<b>আপনি:</b> ${spokenText}<br>`;
+            let robotAnswer = "দুঃখিত, এই প্রশ্নের উত্তর আমার জানা নেই। অনুগ্রহ করে তালিকায় এটি সেভ করে দিন।";
+            
+            for (let i = 0; i < qaDatabase.length; i++) {
+                if (spokenText.toLowerCase().includes(qaDatabase[i].q.toLowerCase())) {
+                    robotAnswer = qaDatabase[i].a;
+                    break;
+                }
+            }
+            chatLog.innerHTML += `<b>রোবট:</b> <span style="color:#0969da">${robotAnswer}</span>`;
+            speak(robotAnswer);
+        };
+
+        recognition.onend = () => {
+            if (isRobotOn) {
+                setTimeout(() => { if (isRobotOn) try { recognition.start(); } catch(e) {} }, 400);
+            }
+        };
+        
+        recognition.onerror = (event) => {
+            if (isRobotOn && event.error !== 'not-allowed') {
+                try { recognition.start(); } catch(e) {}
+            }
+        };
+    }
+
+    function speak(text) {
+        if (!text) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'bn-BD'; 
+        utterance.rate = 1.0; 
+        if (recognition) recognition.stop();
+
+        utterance.onend = () => {
+            if (isRobotOn && recognition) {
+                setTimeout(() => { if (isRobotOn) try { recognition.start(); } catch(e) {} }, 300);
+            }
+        };
+        window.speechSynthesis.speak(utterance);
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+        const q = document.getElementById('newQuestion').value.trim();
+        const a = document.getElementById('newAnswer').value.trim();
+        const editIndex = document.getElementById('editIndex').value;
+
+        if (q && a) {
+            if (editIndex !== "") {
+                qaDatabase[editIndex] = { q, a };
+                document.getElementById('editIndex').value = "";
+                alert("সফলভাবে আপডেট করা হয়েছে!");
+            } else {
+                qaDatabase.push({ q, a });
+                alert("সফলভাবে সেভ করা হয়েছে!");
+            }
+            document.getElementById('newQuestion').value = '';
+            document.getElementById('newAnswer').value = '';
+            updateQATable();
+        } else {
+            alert("অনুগ্রহ করে প্রশ্ন এবং উত্তর দুটিই লিখুন।");
+        }
+    });
+
+    window.editQA = function(index) {
+        document.getElementById('newQuestion').value = qaDatabase[index].q;
+        document.getElementById('newAnswer').value = qaDatabase[index].a;
+        document.getElementById('editIndex').value = index;
+        window.scrollTo(0, 0);
+    };
+
+    window.deleteQA = function(index) {
+        if (confirm("আপনি কি নিশ্চিতভাবে এই প্রশ্ন-উত্তরটি ডিলিট করতে চান?")) {
+            qaDatabase.splice(index, 1);
+            updateQATable();
+        }
+    };
+
+    updateQATable();
+</script>
+</body>
+</html>
