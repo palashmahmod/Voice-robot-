@@ -116,6 +116,7 @@
     </div>
 </div>
 <script>
+    // ডেটাবেজ সেটআপ
     const defaultQA = [
         { q: "হ্যালো", a: "হ্যালো! আমি আপনাকে কীভাবে সাহায্য করতে পারি?" },
         { q: "তোমার নাম কি", a: "আমি আপনার তৈরি করা একটি ভয়েস রোবট।" },
@@ -130,7 +131,7 @@
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = false; 
-        recognition.lang = 'bn-BD'; 
+        recognition.lang = 'bn-BD'; // বাংলা ভাষা
         recognition.interimResults = false;
     } else {
         alert("আপনার ব্রাউজারে ভয়েস সিস্টেম সাপোর্ট করছে না। Google Chrome ব্যবহার করুন।");
@@ -158,66 +159,100 @@
         localStorage.setItem('voiceQA_v2', JSON.stringify(qaDatabase));
     }
 
+    // ON বাটন ক্লিক
     document.getElementById('startBtn').addEventListener('click', () => {
         if (!recognition || isRobotOn) return; 
         isRobotOn = true;
         statusText.innerHTML = "অবস্থা: চালু আছে (আপনার কথা শুনছি...) 🟢";
         statusText.style.color = "#2da44e";
-        speak(""); 
-        try { recognition.start(); } catch(e) {}
+        
+        // ব্রাউজারকে একটিভ করার জন্য প্রথমে একটি খালি টেক্সট প্লে করা হচ্ছে
+        speak("ভয়েস সিস্টেম চালু হয়েছে"); 
     });
 
+    // OFF বাটন ক্লিক
     document.getElementById('stopBtn').addEventListener('click', () => {
         isRobotOn = false;
         if (recognition) recognition.stop();
+        window.speechSynthesis.cancel();
         statusText.innerHTML = "অবস্থা: বন্ধ আছে 🔴";
         statusText.style.color = "#cf222e";
     });
+
     if (recognition) {
+        // যখন মুখে কথা বলবেন
         recognition.onresult = (event) => {
             const spokenText = event.results.transcript.trim();
-            chatLog.innerHTML = `<b>আপনি:</b> ${spokenText}<br>`;
-            let robotAnswer = "দুঃখিত, এই প্রশ্নের উত্তর আমার জানা নেই। অনুগ্রহ করে তালিকায় এটি সেভ করে দিন।";
+            chatLog.innerHTML = `<b>আপনি বলেছেন:</b> <span style="color: green; font-size: 18px;">"${spokenText}"</span><br>`;
             
+            let robotAnswer = "";
+            
+            // ডাটাবেজে প্রশ্ন মেলানোর চেষ্টা (ছোট-বড় হাত বা স্পেস ট্রিম করে)
             for (let i = 0; i < qaDatabase.length; i++) {
-                if (spokenText.toLowerCase().includes(qaDatabase[i].q.toLowerCase())) {
+                if (spokenText.toLowerCase().includes(qaDatabase[i].q.toLowerCase().trim())) {
                     robotAnswer = qaDatabase[i].a;
                     break;
                 }
             }
-            chatLog.innerHTML += `<b>রোবট:</b> <span style="color:#0969da">${robotAnswer}</span>`;
+
+            // যদি মিল না পায়, তবে যা শুনেছে সেটাই মুখে বলবে (Echo Test)
+            if (robotAnswer === "") {
+                robotAnswer = "আপনি বলেছেন " + spokenText + "। এই প্রশ্নের কোনো উত্তর সেভ করা নেই।";
+            }
+
+            chatLog.innerHTML += `<b>রোবট:</b> <span style="color:#0969da; font-size: 18px;">${robotAnswer}</span>`;
             speak(robotAnswer);
         };
 
+        // লুপ মেইনটেইন করা
         recognition.onend = () => {
             if (isRobotOn) {
-                setTimeout(() => { if (isRobotOn) try { recognition.start(); } catch(e) {} }, 400);
+                setTimeout(() => { 
+                    if (isRobotOn) {
+                        try { recognition.start(); } catch(e) { console.log(e); }
+                    }
+                }, 400);
             }
         };
         
         recognition.onerror = (event) => {
+            console.log("Speech Error: ", event.error);
             if (isRobotOn && event.error !== 'not-allowed') {
-                try { recognition.start(); } catch(e) {}
+                setTimeout(() => { if (isRobotOn) try { recognition.start(); } catch(e) {} }, 400);
             }
         };
     }
 
+    // ভয়েস আউটপুট ফাংশন (Text to Speech)
     function speak(text) {
         if (!text) return;
-        window.speechSynthesis.cancel();
+        
+        // কথা বলার সময় মাইক্রোফোন পজ করা যেন নিজের কথা নিজে না শোনে
+        if (recognition) {
+            try { recognition.stop(); } catch(e){}
+        }
+        
+        window.speechSynthesis.cancel(); // আগের ভয়েস ক্লিয়ার করা
+
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'bn-BD'; 
+        utterance.lang = 'bn-BD'; // বাংলা ভয়েস আউটপুট
         utterance.rate = 1.0; 
-        if (recognition) recognition.stop();
+        utterance.pitch = 1.0;
 
         utterance.onend = () => {
             if (isRobotOn && recognition) {
-                setTimeout(() => { if (isRobotOn) try { recognition.start(); } catch(e) {} }, 300);
+                setTimeout(() => { 
+                    if (isRobotOn) {
+                        try { recognition.start(); } catch(e) {}
+                    }
+                }, 400);
             }
         };
+
         window.speechSynthesis.speak(utterance);
     }
 
+    // নতুন ডেটা সেভ করা
     document.getElementById('saveBtn').addEventListener('click', () => {
         const q = document.getElementById('newQuestion').value.trim();
         const a = document.getElementById('newAnswer').value.trim();
